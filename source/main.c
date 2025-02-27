@@ -2,60 +2,67 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <time.h>
-#include "driver/orders.h"
 #include "driver/elevio.h"
-#include "driver/set_up.h"
 #include "driver/safety.h"
+#include "driver/start_up.h"
+#include "driver/orders.h"
 
 
 
-int vent = 0; //hvis vi skal vente = 1, ellers = 0
+
+
 
 int main(){
     elevio_init();
     
     printf("=== Example Program ===\n");
     printf("Press the stop button on the elevator panel to exit\n");
-
-    //Oppstartsfase START--------------------------------------------------------------
-    nullstill_lister();
-    go_to_start_pos();
-    vent = 1;
-    //Oppstartsfase SLUTT--------------------------------------------------------------
    
+
+    // setter variabler (extern ints i start_up.h), oppstartsfase
+    oppstart = 0; 
+    bytt = 1;
+    last_floor = 0;
+    reset_lists();
+    start_up_fase();
+    has_been_pressed = 0;
+    dir = 1; //1 = opp, 0 = ned
+
     while(1){
-        stop_elevator(); //logikk for stopp-knapp
-        update_orders();
-        print_lister();
-        if(elevio_callButton(2,0)){ //opp fra 3. etasje (e)
-            vent = 0;
-            elevio_motorDirection(DIRN_UP);
-        } 
         int floor = elevio_floorSensor();
-        //elevio_floorIndicator(floor);
-       
-        if(elevio_floorSensor()==0 && vent==0){
-            elevio_motorDirection(DIRN_UP);
-        }
-        if(elevio_floorSensor()==ant_etasjer-1 && vent==0){
-            elevio_motorDirection(DIRN_DOWN);
 
-        }
+        //logikk for stoppknapp
+        stop_elevator(&has_been_pressed);
 
-        for(int f = 0; f < N_FLOORS; f++){
-            for(int b = 0; b < N_BUTTONS; b++){
-                int btnPressed = elevio_callButton(f, b);
-                elevio_buttonLamp(f, b, btnPressed);
-            }
-        }
-
+        //legge til bestillinger inne/ute i lister
+        add_orders();
       
+        
+        floor = elevio_floorSensor();
+        
+        if (floor != -1){
+            last_floor = floor;
+        }
+        
+
+        //Logikk for retning heisen skal kjøre
+        direction_logic();
+       
+        //oppdaterer etasjevariabelen
+        floor = elevio_floorSensor();
+        
+        //stopper i etasjen hvis den ligger i bestillingslisten vi følger, kjører så til neste etasje i listen
+        deliver_orders(); 
+       
+        //lukker alltid døren hvis den er åpen, så lenge det ikke er obstruksjon
+        close_door();
+
+
 
         
-    
-        nanosleep(&(struct timespec){0, 10 * 1000 * 1000}, NULL);
-
+        nanosleep(&(struct timespec){0, 20*1000*1000}, NULL);
     }
 
     return 0;
 }
+
